@@ -1,6 +1,6 @@
-from .base import Base
 from sqlalchemy import Column, Integer, String, ForeignKey, Date
 from sqlalchemy.orm import relationship
+from .base import Base  # Corrigido
 
 class Case(Base):
     __tablename__ = 'cases'
