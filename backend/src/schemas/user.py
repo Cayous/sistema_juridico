@@ -20,3 +20,7 @@ class User(UserBase):
 
     class Config:
         from_attributes = True
+
+# Adicionar a classe UserInDB
+class UserInDB(User):
+    hashed_password: str
