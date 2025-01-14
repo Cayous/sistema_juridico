@@ -1,36 +1,55 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
+from fastapi.responses import HTMLResponse
 from ..core.database import get_db
-from ..core.security import verify_password, create_access_token
 from ..models.user import User
-from ..schemas.user import UserCreate, User as UserSchema
+from ..schemas.user import UserCreate, UserInDB
+from ..core.security import get_password_hash
+from datetime import datetime
 
 router = APIRouter()
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
-@router.post("/token")
-async def login(
-    form_data: OAuth2PasswordRequestForm = Depends(),
+@router.post("/register", response_class=HTMLResponse)
+async def register(
+    email: str = Form(...),
+    full_name: str = Form(...),
+    password: str = Form(...),
     db: Session = Depends(get_db)
 ):
-    user = db.query(User).filter(User.email == form_data.username).first()
-    if not user or not verify_password(form_data.password, user.hashed_password):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-    access_token = create_access_token(data={"sub": user.email})
-    return {"access_token": access_token, "token_type": "bearer"}
-
-@router.post("/register", response_model=UserSchema)
-async def register(user: UserCreate, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == user.email).first()
+    # Criar objeto UserCreate para validação
+    user_create = UserCreate(email=email, full_name=full_name, password=password)
+    
+    # Verificar se o email já existe
+    db_user = db.query(User).filter(User.email == user_create.email).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Email already registered")
-    new_user = User(**user.dict())
+    
+    # Criptografa a senha
+    hashed_password = get_password_hash(user_create.password)
+    
+    # Criar novo usuário
+    new_user = User(
+        email=user_create.email,
+        full_name=user_create.full_name,
+        hashed_password=hashed_password,
+        is_active=True,
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
+    )
+    
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
-    return new_user
+    
+    # Criar UserInDB para garantir que todos os campos estão corretos
+    user_in_db = UserInDB(
+        id=new_user.id,
+        email=new_user.email,
+        full_name=new_user.full_name,
+        is_active=new_user.is_active,
+        created_at=new_user.created_at,
+        updated_at=new_user.updated_at,
+        hashed_password=new_user.hashed_password
+    )
+    
+    return f'<p class="text-green-500">User registered successfully! Welcome {user_in_db.full_name}</p>'
